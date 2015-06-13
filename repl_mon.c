@@ -64,9 +64,31 @@ repl_mon_sighup(SIGNAL_ARGS)
 }
 
 static void
-repl_mon_update_data(StringInfoData buf)
+repl_mon_prepare_queries()
+{
+    SetCurrentStatementStartTimestamp();
+    StartTransactionCommand();
+    SPI_connect();
+    PushActiveSnapshot(GetTransactionSnapshot());
+    SetCurrentStatementStartTimestamp();
+}
+
+static void
+repl_mon_finish_queries()
+{
+    SPI_finish();
+    PopActiveSnapshot();
+    CommitTransactionCommand();
+    pgstat_report_activity(STATE_IDLE, NULL);
+}
+
+static void
+repl_mon_init()
 {
     int ret;
+    StringInfoData buf;
+
+    repl_mon_prepare_queries();
 
     /* Creating table if it does not exist */
     initStringInfo(&buf);
@@ -90,7 +112,17 @@ repl_mon_update_data(StringInfoData buf)
             elog(FATAL, "Error while creating table");
     }
 
-    /* Updating data */
+    repl_mon_finish_queries();
+}
+
+static void
+repl_mon_update_data()
+{
+    int ret;
+    StringInfoData buf;
+
+    repl_mon_prepare_queries();
+
     initStringInfo(&buf);
     appendStringInfo(&buf, "WITH repl AS ("
             "SELECT count(*) AS cnt FROM pg_catalog.pg_stat_replication "
@@ -115,13 +147,13 @@ repl_mon_update_data(StringInfoData buf)
         if (ret != SPI_OK_INSERT)
             elog(FATAL, "Error while inserting timestamp");
     }
+
+    repl_mon_finish_queries();
 }
 
 static void
 repl_mon_main(Datum main_arg)
 {
-    StringInfoData buf;
-
     /* Register functions for SIGTERM/SIGHUP management */
     pqsignal(SIGHUP, repl_mon_sighup);
     pqsignal(SIGTERM, repl_mon_sigterm);
@@ -132,7 +164,8 @@ repl_mon_main(Datum main_arg)
     /* Connect to a database */
     BackgroundWorkerInitializeConnection("postgres", NULL);
 
-    initStringInfo(&buf);
+    /* Creating table if it does not exist */
+    repl_mon_init();
 
     while (!got_sigterm)
     {
@@ -155,6 +188,8 @@ repl_mon_main(Datum main_arg)
             ProcessConfigFile(PGC_SIGHUP);
             got_sighup = false;
             ereport(DEBUG1, (errmsg("bgworker repl_mon signal: processed SIGHUP")));
+            /* Recreate table if needed */
+            repl_mon_init();
         }
 
         if (got_sigterm)
@@ -164,21 +199,8 @@ repl_mon_main(Datum main_arg)
             proc_exit(0);
         }
 
-        SetCurrentStatementStartTimestamp();
-        StartTransactionCommand();
-        SPI_connect();
-        PushActiveSnapshot(GetTransactionSnapshot());
-
-        /* Statement start time */
-        SetCurrentStatementStartTimestamp();
-
         /* Main work happens here */
-        repl_mon_update_data(buf);
-
-        SPI_finish();
-        PopActiveSnapshot();
-        CommitTransactionCommand();
-        pgstat_report_activity(STATE_IDLE, NULL);
+        repl_mon_update_data();
     }
 
     /* No problems, so clean exit */
