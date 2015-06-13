@@ -1,0 +1,15 @@
+repl_mon, custom bgworker for PostgreSQL
+=========================================
+
+Background worker which writes current timestamp, current xlog location and
+number of streaming replics to a certain table every certain interval of time.
+
+It is useful for monitoring replication of PostgreSQL instances:
+ - in seconds, not only in bytes,
+ - without the need to have superuser option for monitoring user.
+
+This worker can use the following parameters:
+ - repl_mon.interval, time (ms) between writing information to table.
+ - repl_mon.table, name of the table to write data to, default is "repl_mon".
+
+This worker is compatible with PostgreSQL 9.3 and newer versions.
