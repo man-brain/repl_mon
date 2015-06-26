@@ -25,6 +25,8 @@
 #include "storage/proc.h"
 #include "utils/guc.h"
 #include "utils/snapmgr.h"
+/* Needed for getting hostname of the host */
+#include "unistd.h"
 
 /* Allow load of this module in shared libs */
 PG_MODULE_MAGIC;
@@ -42,6 +44,8 @@ static char *tablename = "repl_mon";
 
 /* Worker name */
 static char *worker_name = "repl_mon";
+
+static char hostname[HOST_NAME_MAX];
 
 static void
 repl_mon_sigterm(SIGNAL_ARGS)
@@ -88,6 +92,9 @@ repl_mon_init()
     int ret;
     StringInfoData buf;
 
+    if (gethostname(hostname, sizeof hostname) != 0)
+        elog(FATAL, "Error while trying to get hostname");
+
     repl_mon_prepare_queries();
 
     /* Creating table if it does not exist */
@@ -104,8 +111,8 @@ repl_mon_init()
         initStringInfo(&buf);
         appendStringInfo(&buf, "CREATE TABLE public.%s ("
                 "ts timestamp with time zone,"
-                "location text, replics int"
-                ");", tablename);
+                "location text, replics int,"
+                "master text);", tablename);
         pgstat_report_activity(STATE_RUNNING, buf.data);
         ret = SPI_execute(buf.data, false, 0);
         if (ret != SPI_OK_UTILITY)
@@ -128,7 +135,7 @@ repl_mon_update_data()
             "SELECT count(*) AS cnt FROM pg_catalog.pg_stat_replication "
             "WHERE state='streaming') UPDATE public.%s "
             "SET ts = current_timestamp, location = pg_current_xlog_location(), "
-            "replics = repl.cnt FROM repl", tablename);
+            "replics = repl.cnt, master = '%s' FROM repl", tablename, hostname);
     pgstat_report_activity(STATE_RUNNING, buf.data);
     ret = SPI_execute(buf.data, false, 1);
     if (ret != SPI_OK_UPDATE)
@@ -141,7 +148,7 @@ repl_mon_update_data()
                 "SELECT count(*) AS cnt FROM pg_catalog.pg_stat_replication "
                 "WHERE state='streaming') INSERT INTO public.%s "
                 "SELECT current_timestamp, pg_current_xlog_location(), "
-                "repl.cnt FROM repl", tablename);
+                "repl.cnt, '%s' FROM repl", tablename, hostname);
         pgstat_report_activity(STATE_RUNNING, buf.data);
         ret = SPI_execute(buf.data, false, 0);
         if (ret != SPI_OK_INSERT)
