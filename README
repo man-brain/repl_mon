@@ -13,3 +13,6 @@ This worker can use the following parameters:
  - repl_mon.table, name of the table to write data to, default is "repl_mon".
 
 This worker is compatible with PostgreSQL 9.3 and newer versions.
+
+More info could be found in this blog entry --
+https://simply.name/postgresql-replication-monitoring.html.
