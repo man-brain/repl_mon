@@ -84,6 +84,14 @@ repl_mon_finish_queries()
     PopActiveSnapshot();
     CommitTransactionCommand();
     pgstat_report_activity(STATE_IDLE, NULL);
+
+    /*
+     * Send statistic about updated table to stats collector
+     * to prevent bloating table. If we don't do this, we
+     * will not know about number of dead tuples in table.
+     * Consequently, autovacuum will not come.
+     */
+    pgstat_report_stat(false);
 }
 
 static void
