@@ -34,6 +34,9 @@ PG_MODULE_MAGIC;
 /* Entry point of library loading */
 void _PG_init(void);
 
+#if PG_VERSION_NUM >= 100000
+void repl_mon_main(Datum) pg_attribute_noreturn();
+#endif
 /* Signal handling */
 static volatile sig_atomic_t got_sigterm = false;
 static volatile sig_atomic_t got_sighup = false;
@@ -46,6 +49,12 @@ static char *tablename = "repl_mon";
 static char *worker_name = "repl_mon";
 
 static char hostname[HOST_NAME_MAX];
+
+#if PG_VERSION_NUM >= 100000
+static char *get_current_lsn = "pg_current_wal_lsn()";
+#else
+static char *get_current_lsn = "pg_current_xlog_location()";
+#endif
 
 static void
 repl_mon_sigterm(SIGNAL_ARGS)
@@ -142,8 +151,8 @@ repl_mon_update_data()
     appendStringInfo(&buf, "WITH repl AS ("
             "SELECT count(*) AS cnt FROM pg_catalog.pg_stat_replication "
             "WHERE state='streaming') UPDATE public.%s "
-            "SET ts = current_timestamp, location = pg_current_xlog_location(), "
-            "replics = repl.cnt, master = '%s' FROM repl", tablename, hostname);
+            "SET ts = current_timestamp, location = %s, "
+            "replics = repl.cnt, master = '%s' FROM repl", tablename, get_current_lsn, hostname);
     pgstat_report_activity(STATE_RUNNING, buf.data);
     ret = SPI_execute(buf.data, false, 1);
     if (ret != SPI_OK_UPDATE)
@@ -155,8 +164,8 @@ repl_mon_update_data()
         appendStringInfo(&buf, "WITH repl AS ("
                 "SELECT count(*) AS cnt FROM pg_catalog.pg_stat_replication "
                 "WHERE state='streaming') INSERT INTO public.%s "
-                "SELECT current_timestamp, pg_current_xlog_location(), "
-                "repl.cnt, '%s' FROM repl", tablename, hostname);
+                "SELECT current_timestamp, %s, "
+                "repl.cnt, '%s' FROM repl", tablename, get_current_lsn, hostname);
         pgstat_report_activity(STATE_RUNNING, buf.data);
         ret = SPI_execute(buf.data, false, 0);
         if (ret != SPI_OK_INSERT)
@@ -166,7 +175,11 @@ repl_mon_update_data()
     repl_mon_finish_queries();
 }
 
+#if PG_VERSION_NUM < 100000
 static void
+#else
+void
+#endif
 repl_mon_main(Datum main_arg)
 {
     /* Register functions for SIGTERM/SIGHUP management */
@@ -189,7 +202,11 @@ repl_mon_main(Datum main_arg)
         /* Wait necessary amount of time */
         rc = WaitLatch(&MyProc->procLatch,
                        WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
+#if PG_VERSION_NUM < 100000
                        interval);
+#else
+                       interval, PG_WAIT_EXTENSION);
+#endif
         ResetLatch(&MyProc->procLatch);
 
         /* Emergency bailout if postmaster has died */
@@ -266,8 +283,14 @@ _PG_init(void)
         BGWORKER_BACKEND_DATABASE_CONNECTION;
     /* Start only on master hosts after finishing crash recovery */
     worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
+#if PG_VERSION_NUM < 100000
     worker.bgw_main = repl_mon_main;
+#endif
     snprintf(worker.bgw_name, BGW_MAXLEN, "%s", worker_name);
+#if PG_VERSION_NUM >= 100000
+    sprintf(worker.bgw_library_name, "repl_mon");
+    sprintf(worker.bgw_function_name, "repl_mon_main");
+#endif
     /* Wait 10 seconds for restart after crash */
     worker.bgw_restart_time = 10;
     worker.bgw_main_arg = (Datum) 0;
