@@ -50,6 +50,12 @@ static char *worker_name = "repl_mon";
 
 static char hostname[HOST_NAME_MAX];
 
+#if PG_VERSION_NUM >= 100000
+static char *get_current_lsn = "pg_current_wal_lsn()";
+#else
+static char *get_current_lsn = "pg_current_xlog_location()";
+#endif
+
 static void
 repl_mon_sigterm(SIGNAL_ARGS)
 {
@@ -145,12 +151,8 @@ repl_mon_update_data()
     appendStringInfo(&buf, "WITH repl AS ("
             "SELECT count(*) AS cnt FROM pg_catalog.pg_stat_replication "
             "WHERE state='streaming') UPDATE public.%s "
-#if PG_VERSION_NUM < 100000
-            "SET ts = current_timestamp, location = pg_current_xlog_location(), "
-#else
-            "SET ts = current_timestamp, location = pg_current_wal_lsn(), "
-#endif
-            "replics = repl.cnt, master = '%s' FROM repl", tablename, hostname);
+            "SET ts = current_timestamp, location = %s, "
+            "replics = repl.cnt, master = '%s' FROM repl", tablename, get_current_lsn, hostname);
     pgstat_report_activity(STATE_RUNNING, buf.data);
     ret = SPI_execute(buf.data, false, 1);
     if (ret != SPI_OK_UPDATE)
@@ -162,12 +164,8 @@ repl_mon_update_data()
         appendStringInfo(&buf, "WITH repl AS ("
                 "SELECT count(*) AS cnt FROM pg_catalog.pg_stat_replication "
                 "WHERE state='streaming') INSERT INTO public.%s "
-#if PG_VERSION_NUM < 100000
-                "SELECT current_timestamp, pg_current_xlog_location(), "
-#else
-                "SELECT current_timestamp, pg_current_wal_lsn(), "
-#endif
-                "repl.cnt, '%s' FROM repl", tablename, hostname);
+                "SELECT current_timestamp, %s, "
+                "repl.cnt, '%s' FROM repl", tablename, get_current_lsn, hostname);
         pgstat_report_activity(STATE_RUNNING, buf.data);
         ret = SPI_execute(buf.data, false, 0);
         if (ret != SPI_OK_INSERT)
