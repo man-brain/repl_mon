@@ -190,7 +190,11 @@ repl_mon_main(Datum main_arg)
     BackgroundWorkerUnblockSignals();
 
     /* Connect to a database */
+#if PG_VERSION_NUM < 110000
     BackgroundWorkerInitializeConnection("postgres", NULL);
+#else
+    BackgroundWorkerInitializeConnection("postgres", NULL, 0);
+#endif
 
     /* Creating table if it does not exist */
     repl_mon_init();
