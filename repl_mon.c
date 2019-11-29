@@ -28,6 +28,15 @@
 /* Needed for getting hostname of the host */
 #include "unistd.h"
 
+/* Some OS lacks HOST_NAME_MAX */
+#ifndef HOST_NAME_MAX
+# if defined(_POSIX_HOST_NAME_MAX)
+#  define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+# elif defined(MAXHOSTNAMELEN)
+#  define HOST_NAME_MAX MAXHOSTNAMELEN
+# endif
+#endif /* HOST_NAME_MAX */
+
 /* Allow load of this module in shared libs */
 PG_MODULE_MAGIC;
 
