@@ -4,7 +4,7 @@
  *      Store replication related information of a Postgres instance
  *      once in a while.
  *
- * Copyright (c) 1996-2018, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *        repl_mon/repl_mon.c
