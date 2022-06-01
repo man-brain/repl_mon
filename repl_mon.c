@@ -136,6 +136,35 @@ repl_mon_init()
             elog(FATAL, "Error while creating table");
     }
 
+    /* Make repl_mon settings visible on replicas */
+    initStringInfo(&buf);
+    appendStringInfo(&buf, "CREATE TABLE IF NOT EXISTS public.%s_settings ("
+                "key TEXT PRIMARY KEY,"
+                "value TEXT NOT NULL)", tablename);
+    pgstat_report_activity(STATE_RUNNING, buf.data);
+    ret = SPI_execute(buf.data, false, 0);
+    if (ret != SPI_OK_UTILITY)
+        elog(FATAL, "Error while creating setting table");
+
+    initStringInfo(&buf);
+    appendStringInfo(&buf, "UPDATE public.%s_settings SET value = '%d' WHERE key = '%s'",
+                tablename, interval, "interval");
+    pgstat_report_activity(STATE_RUNNING, buf.data);
+    ret = SPI_execute(buf.data, false, 0);
+    if (ret != SPI_OK_UPDATE)
+        elog(FATAL, "Error while updating settings table");
+
+    if (SPI_processed == 0)
+    {
+        initStringInfo(&buf);
+        appendStringInfo(&buf, "INSERT INTO public.%s_settings VALUES ('%s', '%d')",
+                tablename, "interval", interval);
+        pgstat_report_activity(STATE_RUNNING, buf.data);
+        ret = SPI_execute(buf.data, false, 0);
+        if (ret != SPI_OK_INSERT)
+            elog(FATAL, "Error while inserting into settings table");
+    }
+
     repl_mon_finish_queries();
 }
 
