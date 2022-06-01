@@ -236,7 +236,8 @@ repl_mon_main(Datum main_arg)
         }
 
         /* Main work happens here */
-        repl_mon_update_data();
+        if (interval > 0)
+            repl_mon_update_data();
     }
 
     /* No problems, so clean exit */
@@ -251,7 +252,7 @@ repl_mon_load_params(void)
                             "Default of 1s, max of 300s",
                             &interval,
                             1000,
-                            1,
+                            0,
                             300000,
                             PGC_SIGHUP,
                             GUC_UNIT_MS,
