@@ -9,7 +9,7 @@ It is useful for monitoring replication of PostgreSQL instances:
  - without the need to have superuser option for monitoring user.
 
 This worker can use the following parameters:
- - repl_mon.interval, time (ms) between writing information to table.
+ - repl_mon.interval, time (ms) between writing information to table, default is 1000, set 0 to disable updates.
  - repl_mon.table, name of the table to write data to, default is "repl_mon".
 
 This worker is compatible with PostgreSQL 9.3 and newer versions.
