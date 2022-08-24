@@ -240,14 +240,15 @@ repl_mon_main(Datum main_arg)
     while (!got_sigterm)
     {
         int rc;
+        int wait_interval = interval > 0 ? interval: 1000;
 
         /* Wait necessary amount of time */
         rc = WaitLatch(&MyProc->procLatch,
                        WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
 #if PG_VERSION_NUM < 100000
-                       interval);
+                       wait_interval);
 #else
-                       interval, PG_WAIT_EXTENSION);
+                       wait_interval, PG_WAIT_EXTENSION);
 #endif
         ResetLatch(&MyProc->procLatch);
 
