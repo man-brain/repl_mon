@@ -218,6 +218,7 @@ static void
 #else
 void
 #endif
+__attribute__ ((visibility ("default")))
 repl_mon_main(Datum main_arg)
 {
     /* Register functions for SIGTERM/SIGHUP management */
