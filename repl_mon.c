@@ -44,7 +44,7 @@ PG_MODULE_MAGIC;
 void _PG_init(void);
 
 #if PG_VERSION_NUM >= 100000
-void repl_mon_main(Datum) pg_attribute_noreturn();
+PGDLLEXPORT void repl_mon_main(Datum) pg_attribute_noreturn();
 #endif
 /* Signal handling */
 static volatile sig_atomic_t got_sigterm = false;
