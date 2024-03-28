@@ -274,6 +274,8 @@ repl_mon_main(Datum main_arg)
             proc_exit(0);
         }
 
+        CHECK_FOR_INTERRUPTS();
+
         /* Main work happens here */
         if (interval > 0)
             repl_mon_update_data();
