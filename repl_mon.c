@@ -43,7 +43,9 @@ PG_MODULE_MAGIC;
 /* Entry point of library loading */
 void _PG_init(void);
 
-#if PG_VERSION_NUM >= 100000
+#if PG_VERSION_NUM >= 180000
+PGDLLEXPORT pg_noreturn void repl_mon_main(Datum);
+#elif PG_VERSION_NUM >= 100000
 PGDLLEXPORT void repl_mon_main(Datum) pg_attribute_noreturn();
 #endif
 /* Signal handling */
