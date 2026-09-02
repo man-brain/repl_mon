@@ -23,6 +23,7 @@
 #include "storage/ipc.h"
 #include "storage/latch.h"
 #include "storage/proc.h"
+#include "tcop/tcopprot.h"
 #include "utils/guc.h"
 #include "utils/snapmgr.h"
 /* Needed for getting hostname of the host */
@@ -49,7 +50,6 @@ PGDLLEXPORT pg_noreturn void repl_mon_main(Datum);
 PGDLLEXPORT void repl_mon_main(Datum) pg_attribute_noreturn();
 #endif
 /* Signal handling */
-static volatile sig_atomic_t got_sigterm = false;
 static volatile sig_atomic_t got_sighup = false;
 
 /* GUC variables */
@@ -66,16 +66,6 @@ static char *get_current_lsn = "pg_current_wal_lsn()";
 #else
 static char *get_current_lsn = "pg_current_xlog_location()";
 #endif
-
-static void
-repl_mon_sigterm(SIGNAL_ARGS)
-{
-    int save_errno = errno;
-    got_sigterm = true;
-    if (MyProc)
-        SetLatch(&MyProc->procLatch);
-    errno = save_errno;
-}
 
 static void
 repl_mon_sighup(SIGNAL_ARGS)
@@ -224,7 +214,7 @@ repl_mon_main(Datum main_arg)
 {
     /* Register functions for SIGTERM/SIGHUP management */
     pqsignal(SIGHUP, repl_mon_sighup);
-    pqsignal(SIGTERM, repl_mon_sigterm);
+    pqsignal(SIGTERM, die);
 
     /* We're now ready to receive signals */
     BackgroundWorkerUnblockSignals();
@@ -236,10 +226,13 @@ repl_mon_main(Datum main_arg)
     BackgroundWorkerInitializeConnection("postgres", NULL, 0);
 #endif
 
+    /* Monitoring updates must never wait for synchronous standbys. */
+    SetConfigOption("synchronous_commit", "off", PGC_USERSET, PGC_S_SESSION);
+
     /* Creating table if it does not exist */
     repl_mon_init();
 
-    while (!got_sigterm)
+    for (;;)
     {
         int rc;
         int wait_interval = interval > 0 ? interval: 1000;
@@ -267,13 +260,6 @@ repl_mon_main(Datum main_arg)
             ereport(DEBUG1, (errmsg("bgworker repl_mon signal: processed SIGHUP")));
             /* Recreate table if needed */
             repl_mon_init();
-        }
-
-        if (got_sigterm)
-        {
-            /* Simply exit */
-            ereport(DEBUG1, (errmsg("bgworker repl_mon signal: processed SIGTERM")));
-            proc_exit(0);
         }
 
         CHECK_FOR_INTERRUPTS();
